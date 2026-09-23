@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PPT Brand Converter — Learners Point</title>
+<style>
+  :root {
+    --teal: #2A9D8F; --blue: #3D6CB9; --orange: #E8783A; --navy: #1A3A5C;
+    --gray: #6E6E6E; --border: #E7E7E7; --bg: #FAFAFC;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    background: linear-gradient(135deg, #eef7f5 0%, #ffffff 45%, #eef1fb 100%);
+    margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+    padding: 48px 20px;
+    color: #333;
+  }
+  .logo-row { display:flex; align-items:center; gap:10px; margin-bottom: 8px; }
+  .logo-mark { width: 34px; height: 34px; border-radius: 8px; background: var(--navy); color: white;
+    display:flex; align-items:center; justify-content:center; font-weight:700; font-size:15px; }
+  h1 { font-size: 22px; color: var(--navy); margin: 0 0 4px; font-weight: 700; }
+  .subtitle { color: var(--gray); font-size: 14px; margin-bottom: 36px; text-align:center; }
+  .card {
+    background: white; border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: 0 4px 24px rgba(26,58,92,0.08); padding: 32px; width: 100%; max-width: 460px;
+  }
+  .dropzone {
+    border: 2px dashed #cfd8e3; border-radius: 10px; padding: 28px 16px; text-align: center;
+    cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .dropzone:hover, .dropzone.drag { border-color: var(--teal); background: #f3faf9; }
+  .dropzone svg { margin-bottom: 10px; }
+  .dropzone .hint { color: var(--gray); font-size: 13px; margin-top: 6px; }
+  .filename { margin-top: 14px; font-size: 13px; color: var(--navy); font-weight: 600; word-break: break-all; }
+  input[type=file] { display: none; }
+  button.convert {
+    width: 100%; margin-top: 20px; padding: 13px; border: none; border-radius: 8px;
+    background: var(--teal); color: white; font-size: 15px; font-weight: 700; cursor: pointer;
+    transition: background .15s;
+  }
+  button.convert:disabled { background: #b9c7c4; cursor: not-allowed; }
+  button.convert:not(:disabled):hover { background: #23897c; }
+  .steps { margin-top: 24px; display: none; }
+  .steps.show { display: block; }
+  .step { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 13.5px; color: var(--gray); }
+  .step .dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #d8dee5; flex-shrink: 0;
+    display:flex; align-items:center; justify-content:center; font-size: 11px; color: white; }
+  .step.active .dot { border-color: var(--blue); background: var(--blue); }
+  .step.active .dot::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: white; opacity:.9; }
+  .step.done .dot { border-color: var(--teal); background: var(--teal); }
+  .step.done .dot::after { content: '✓'; }
+  .step.active, .step.done { color: var(--navy); font-weight: 600; }
+  .progress-text { font-size: 12px; color: var(--gray); margin-top: 4px; padding-left: 28px; }
+  .qa-note { margin-top: 16px; font-size: 12.5px; color: var(--gray); background: #F0F7F6; border: 1px solid var(--teal);
+    border-radius: 8px; padding: 10px 12px; display: none; }
+  .qa-note.show { display: block; }
+  .error-box { margin-top: 16px; font-size: 13px; color: #B03A3A; background: #FDEDED; border: 1px solid #D9534F;
+    border-radius: 8px; padding: 10px 12px; display: none; }
+  .error-box.show { display: block; }
+  .download-btn {
+    display: none; width: 100%; margin-top: 18px; padding: 13px; border: none; border-radius: 8px;
+    background: var(--navy); color: white; font-size: 15px; font-weight: 700; cursor: pointer; text-align:center; text-decoration:none;
+  }
+  .download-btn.show { display: block; }
+  .reset-link { display:none; text-align:center; margin-top:14px; font-size:12.5px; color: var(--gray); cursor:pointer; text-decoration: underline; }
+  .reset-link.show { display:block; }
+</style>
+</head>
+<body>
+  <div class="logo-row">
+    <div class="logo-mark">LP</div>
+  </div>
+  <h1>PPT Brand Converter</h1>
+  <div class="subtitle">Upload any presentation. Get it back in the Learners Point brand template.</div>
+
+  <div class="card">
+    <div class="dropzone" id="dropzone">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#8a97a6" stroke-width="1.6"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg>
+      <div><strong>Choose a PowerPoint file</strong></div>
+      <div class="hint">or drag and drop a .pptx here</div>
+      <input type="file" id="fileInput" accept=".pptx">
+    </div>
+    <div class="filename" id="filename"></div>
+    <button class="convert" id="convertBtn" disabled>Convert to Brand</button>
+
+    <div class="steps" id="steps">
+      <div class="step" data-key="read"><div class="dot"></div><div>Reading presentation</div></div>
+      <div class="step" data-key="understand"><div class="dot"></div><div>Understanding slides</div></div>
+      <div class="step" data-key="brand"><div class="dot"></div><div>Applying brand design</div></div>
+      <div class="step" data-key="reconstruct"><div class="dot"></div><div>Reconstructing slides</div></div>
+      <div class="step" data-key="overflow"><div class="dot"></div><div>Checking overflow</div></div>
+      <div class="step" data-key="qa"><div class="dot"></div><div>Running visual QA</div></div>
+      <div class="progress-text" id="progressText"></div>
+    </div>
+
+    <div class="qa-note" id="qaNote"></div>
+    <div class="error-box" id="errorBox"></div>
+    <a class="download-btn" id="downloadBtn">Download Final PPTX</a>
+    <div class="reset-link" id="resetLink">Convert another file</div>
+  </div>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const filenameEl = document.getElementById('filename');
+const convertBtn = document.getElementById('convertBtn');
+const stepsEl = document.getElementById('steps');
+const progressText = document.getElementById('progressText');
+const qaNote = document.getElementById('qaNote');
+const errorBox = document.getElementById('errorBox');
+const downloadBtn = document.getElementById('downloadBtn');
+const resetLink = document.getElementById('resetLink');
+
+let selectedFile = null;
+let pollTimer = null;
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('drag');
+  if (e.dataTransfer.files.length) selectFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files.length) selectFile(fileInput.files[0]); });
+
+function selectFile(f) {
+  if (!f.name.toLowerCase().endsWith('.pptx')) { alert('Please choose a .pptx file'); return; }
+  selectedFile = f;
+  filenameEl.textContent = 'File: ' + f.name;
+  convertBtn.disabled = false;
+}
+
+convertBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  convertBtn.disabled = true;
+  convertBtn.textContent = 'Converting…';
+  stepsEl.classList.add('show');
+  errorBox.classList.remove('show');
+  qaNote.classList.remove('show');
+  downloadBtn.classList.remove('show');
+
+  const fd = new FormData();
+  fd.append('file', selectedFile);
+  const resp = await fetch('/api/convert', { method: 'POST', body: fd });
+  if (!resp.ok) { showError('Upload failed.'); return; }
+  const { jobId } = await resp.json();
+  pollTimer = setInterval(() => pollStatus(jobId), 1500);
+});
+
+async function pollStatus(jobId) {
+  const resp = await fetch('/api/status/' + jobId);
+  if (!resp.ok) return;
+  const data = await resp.json();
+
+  data.steps.forEach(s => {
+    const el = stepsEl.querySelector('.step[data-key="' + s.key + '"]');
+    if (!el) return;
+    el.classList.toggle('done', s.done);
+    el.classList.toggle('active', !s.done && isCurrentStep(data.steps, s.key));
+  });
+  progressText.textContent = data.progressText || '';
+
+  if (data.status === 'error') {
+    clearInterval(pollTimer);
+    showError(data.error || 'Conversion failed.');
+    convertBtn.disabled = false;
+    convertBtn.textContent = 'Convert to Brand';
+  } else if (data.status === 'done') {
+    clearInterval(pollTimer);
+    downloadBtn.href = '/api/download/' + jobId;
+    downloadBtn.classList.add('show');
+    resetLink.classList.add('show');
+    if (data.qaReport && data.qaReport.flagged && data.qaReport.flagged.length) {
+      qaNote.textContent = 'Visual QA flagged ' + data.qaReport.flagged.length + ' slide(s) worth a manual glance: ' +
+        data.qaReport.flagged.map(f => '#' + f.slide + (f.issue ? ' (' + f.issue + ')' : '')).join(', ');
+      qaNote.classList.add('show');
+    } else {
+      qaNote.textContent = 'Visual QA passed with no flagged slides.';
+      qaNote.classList.add('show');
+    }
+  }
+}
+function isCurrentStep(steps, key) {
+  const idx = steps.findIndex(s => s.key === key);
+  return idx === 0 || steps[idx - 1].done;
+}
+function showError(msg) {
+  errorBox.textContent = msg;
+  errorBox.classList.add('show');
+}
+resetLink.addEventListener('click', () => location.reload());
+</script>
+</body>
+</html>
