@@ -65,7 +65,7 @@ def extract_table(shape):
         rows.append([cell.text.strip() for cell in row.cells])
     return rows
 
-def extract_slide(slide, idx, slide_h_in, img_out_dir):
+def extract_slide(slide, idx, slide_w_in, slide_h_in, img_out_dir):
     result = {
         'index': idx, 'title': None, 'text_blocks': [], 'tables': [],
         'images': [], 'shape_count': 0,
@@ -130,6 +130,37 @@ def extract_slide(slide, idx, slide_h_in, img_out_dir):
 
     xs = sorted(set(round(b['x'], 1) for b in result['text_blocks'] if b['x'] is not None))
     result['column_hint'] = len(xs) if 1 < len(xs) <= 4 else 1
+
+    # Flag slides where a picture likely carries data the surrounding native
+    # text doesn't (a chart, formula, or diagram flattened to an image).
+    # Without this signal the planner sometimes builds a text layout around
+    # only the title and a caption, silently dropping the chart/formula the
+    # image contained — confirmed on real decks on two different failure
+    # shapes: a large dominant chart image, and a thin one-line formula
+    # strip whose area is small but whose content isn't covered by the
+    # slide's (unrelated) paragraph text. Area alone misses the second
+    # case, so this also treats "wide/tall enough to plausibly contain a
+    # rendered formula or mini-chart" as a trigger on its own. This is a
+    # hint for the planner, not a hard rule — false positives (e.g. a
+    # decorative photo) are cheap; missing a real one is not.
+    if result['images']:
+        largest_img = max(result['images'], key=lambda im: (im['w'] or 0) * (im['h'] or 0))
+        img_w, img_h = largest_img['w'] or 0, largest_img['h'] or 0
+        img_area = img_w * img_h
+        slide_area = (slide_w_in or 1) * (slide_h_in or 1)
+        img_coverage = img_area / slide_area if slide_area else 0
+        substantial_strip = img_w > 3 or img_h > 1.5  # catches thin formula/mini-chart strips area misses
+        body_word_count = sum(
+            len(p['text'].split())
+            for b in result['text_blocks']
+            for p in b['paragraphs']
+        )
+        result['dominant_image_sparse_text'] = bool(
+            (img_coverage > 0.15 or substantial_strip) and body_word_count < 60
+        )
+    else:
+        result['dominant_image_sparse_text'] = False
+
     return result
 
 def main():
@@ -138,9 +169,10 @@ def main():
     os.makedirs(img_out_dir, exist_ok=True)
 
     prs = Presentation(src)
+    slide_w_in = emu_to_in(prs.slide_width)
     slide_h_in = emu_to_in(prs.slide_height)
 
-    slides = [extract_slide(slide, i, slide_h_in, img_out_dir) for i, slide in enumerate(prs.slides, start=1)]
+    slides = [extract_slide(slide, i, slide_w_in, slide_h_in, img_out_dir) for i, slide in enumerate(prs.slides, start=1)]
 
     out = {
         'source_slide_count': len(slides),

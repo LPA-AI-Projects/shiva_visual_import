@@ -154,6 +154,18 @@ Row of 2-5 big-number stat tiles on navy tiles. Fields: `title`,
 "38%" or "24" or "<6 wks").
 Use for: source content that is fundamentally a set of headline metrics.
 
+### `donut_stat`
+A real, editable donut/pie chart (2-4 segments) with a value+label legend
+beside it. Fields: `title`, `subtitle?`, `segments` (array of
+`{label, value}`, value a plain number — percentages need not sum to
+100, e.g. two independent completion rates can both be shown).
+Use for: a source slide whose point IS a proportion or split — "65% vs
+35%", "X% of Y adopting Z" — especially when the source itself shows this
+as a donut/pie chart. This is the correct choice instead of forcing
+proportion data into `kpi_stats` (which presents figures as independent
+numbers, losing the "these are parts of one whole" relationship) or
+`compare_columns` (which loses the numeric weighting entirely).
+
 ### `use_case`
 6-panel case-study grid: Background / Challenge / Approach / Recommended
 Solution / Expected Outcomes / Lessons Learned. Fields: `title`,
@@ -217,23 +229,45 @@ Use for: an explicit mathematical/statistical formula slide.
 ### `image_full`
 Fallback: the source slide is fundamentally a diagram, photo, or infographic
 that has no clean structured re-creation (e.g. a complex custom
-illustration, a screenshot, a branded external graphic). Fields: `title?`,
-`source_image_ref` (the image filename from the extraction, as given in
-the source data — use the FIRST/LARGEST image on that source slide).
-Use SPARINGLY — only when no structured layout above can faithfully
-represent the content, and there IS a real extracted image to place.
-Never use this as a lazy default; a slide with real text content should
-always get a structured layout, even if that means a simpler one like
-`checklist`.
+illustration, a screenshot, a branded external graphic) — OR the image
+is the only place the slide's actual data lives (see the rule below).
+Fields: `title?`, `source_image_ref` (the image filename from the
+extraction, as given in the source data — use the FIRST/LARGEST image
+on that source slide).
 
-## Handling images inside structured layouts
+## Handling images inside structured layouts — READ CAREFULLY, this is a
+## confirmed failure mode
 
-Structured layouts in this version do not place inline images (this
-keeps output fully text-editable, matching the requirement that text
-stay editable). If a source slide has BOTH meaningful text AND an image,
-prioritize the text content and pick the layout that fits the text; note
-the image is not reproduced. If a source slide is ALMOST ENTIRELY an
-image with only a title, use `image_full`.
+Structured layouts do not place inline images (this keeps output fully
+text-editable). That is correct for genuinely decorative photos. It is
+**wrong** when the image is a flattened chart, graph, formula, or diagram
+carrying data that appears nowhere else on the slide — on real decks this
+has caused a bar chart's actual values and a formula to silently vanish,
+leaving a slide with only a title and an unrelated caption. Do not repeat
+that.
+
+The rule is about what the TEXT covers, not whether text merely exists:
+
+- Before picking any layout for a slide that has an image, ask: **does
+  the extracted text_blocks content, read on its own, fully state the
+  slide's key point** — the actual numbers, the formula, the comparison —
+  or does it only provide framing/context around a visual that isn't
+  described in words anywhere?
+- If the text is self-sufficient (a real paragraph or list that carries
+  the point), proceed with a structured layout as normal; the image is
+  dropped and that's fine.
+- If the text is framing only — an intro sentence, a footnote, a caption
+  — and the actual data (chart values, a formula, a specific diagram)
+  only exists inside the image, use `image_full`. A near-empty structured
+  slide is a worse outcome than a non-editable but complete one.
+- The extracted JSON includes `dominant_image_sparse_text: true` on
+  slides where a picture is large or a wide/tall strip (the shape of a
+  rendered chart or formula) and the surrounding text is short. Treat
+  this as a strong prompt to apply the test above carefully — it is a
+  hint, not an instruction to auto-use `image_full`; plenty of flagged
+  slides (a section divider with a background photo, a quote slide with
+  a portrait) are correctly handled by a different layout that ignores
+  the image entirely. Judge by the test above, not the flag alone.
 
 ## Splitting rules
 
@@ -256,6 +290,14 @@ image with only a title, use `image_full`.
 - Do not summarize away specifics: numbers, named entities, examples,
   caveats, and exceptions from the source must appear somewhere in your
   output.
+- Transcribe every number and symbol EXACTLY as it appears in the
+  extracted text — do not reinterpret, normalize, or "correct" them.
+  This has gone wrong before: a source value written "~ $300B" (tilde =
+  approximately) was output as "-$300B" (a minus sign), inverting a
+  growth figure into what reads as a loss. `~` means approximately and
+  must stay `~`; it is never a minus sign or a range dash. The same care
+  applies to `+`, `%`, `x` (multiplication or "times"), and currency
+  symbols — copy them character-for-character from the source text.
 - Do not invent an eyebrow/tag/module numbering system the source doesn't
   have. Only add `eyebrow` if there's a real section/module name to put
   there; only add `tag` for the specific recurring instructional patterns
