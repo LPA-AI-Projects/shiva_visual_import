@@ -65,10 +65,25 @@ def extract_table(shape):
         rows.append([cell.text.strip() for cell in row.cells])
     return rows
 
+def extract_notes(slide):
+    """Verbatim speaker notes text, or None. These were previously not
+    extracted at all — Claude never saw them, so there was no way for
+    them to survive into the target deck. Every downstream consumer
+    (planner.js's per-slide schema, render.js's slide.addNotes() call)
+    depends on this being present."""
+    try:
+        if slide.has_notes_slide:
+            text = slide.notes_slide.notes_text_frame.text.strip()
+            return text or None
+    except Exception:
+        pass
+    return None
+
+
 def extract_slide(slide, idx, slide_w_in, slide_h_in, img_out_dir):
     result = {
         'index': idx, 'title': None, 'text_blocks': [], 'tables': [],
-        'images': [], 'shape_count': 0,
+        'images': [], 'shape_count': 0, 'notes': extract_notes(slide),
     }
 
     # Pass 1: find the best title candidate by score (font size dominant).
@@ -163,6 +178,63 @@ def extract_slide(slide, idx, slide_w_in, slide_h_in, img_out_dir):
 
     return result
 
+def extract_common_footer(slides, slide_h_in):
+    """Detect a running footer/disclaimer line repeated near the bottom of
+    most slides (e.g. "Deck Title | Part 1 | Case study | Confidential")
+    and strip it out of every slide's text_blocks, returning it once as a
+    deck-level string.
+
+    This exists because relying on the planner to recognize and
+    consistently handle this pattern per-slide, per-batch, produced
+    exactly the failure this is named for: on one real conversion, a
+    6-slide batch treated the boilerplate footer as if it were a genuine
+    section eyebrow, while every other batch just dropped it — the LLM
+    saw identical input and made two different calls, because nothing in
+    the extracted JSON flagged it as boilerplate to be handled once,
+    deterministically, rather than judged per slide. Confidentiality
+    markers in particular should never depend on the model choosing to
+    reproduce them.
+
+    A line qualifies if it (a) sits in the bottom 15% of the slide, and
+    (b) is identical, verbatim, on at least 25% of slides (minimum 2).
+    Calibrated against a real deck where the footer was present on only
+    5 of 15 slides (33%) — apparently omitted or differently extracted
+    on the others — so a higher threshold would have missed the exact
+    case this exists to catch. Both thresholds stay deliberately
+    conservative in the other direction: false negatives just mean the
+    line reaches the planner as ordinary text (the pre-fix behavior — no
+    worse), whereas a false positive would silently delete real content,
+    which is worse than doing nothing. An exact, verbatim, whole-line
+    match at 25%+ frequency is in practice never an accident.
+    """
+    from collections import Counter
+    bottom_cutoff = slide_h_in * 0.85
+    counts = Counter()
+    for sl in slides:
+        for b in sl['text_blocks']:
+            if b['y'] is not None and b['y'] >= bottom_cutoff:
+                text = ' '.join(p['text'] for p in b['paragraphs']).strip()
+                if text:
+                    counts[text] += 1
+    if not counts:
+        return None, slides
+
+    footer_text, freq = counts.most_common(1)[0]
+    if freq < max(2, 0.25 * len(slides)):
+        return None, slides
+
+    for sl in slides:
+        kept = []
+        for b in sl['text_blocks']:
+            text = ' '.join(p['text'] for p in b['paragraphs']).strip()
+            if b['y'] is not None and b['y'] >= bottom_cutoff and text == footer_text:
+                continue  # stripped — represented once at the deck level instead
+            kept.append(b)
+        sl['text_blocks'] = kept
+
+    return footer_text, slides
+
+
 def main():
     src, out_json = sys.argv[1], sys.argv[2]
     img_out_dir = os.path.join(os.path.dirname(out_json), 'images')
@@ -173,11 +245,13 @@ def main():
     slide_h_in = emu_to_in(prs.slide_height)
 
     slides = [extract_slide(slide, i, slide_w_in, slide_h_in, img_out_dir) for i, slide in enumerate(prs.slides, start=1)]
+    common_footer, slides = extract_common_footer(slides, slide_h_in)
 
     out = {
         'source_slide_count': len(slides),
         'source_width_in': emu_to_in(prs.slide_width),
         'source_height_in': slide_h_in,
+        'common_footer': common_footer,
         'slides': slides,
     }
     with open(out_json, 'w', encoding='utf-8') as f:

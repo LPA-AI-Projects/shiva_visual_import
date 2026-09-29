@@ -24,6 +24,17 @@ represents that same information most faithfully.
   slide TYPE (e.g. "USE CASE", "PRACTICAL LAB", "KNOWLEDGE CHECK") — used
   for recurring instructional patterns (labs, activities, quizzes), not for
   ordinary content slides.
+- Footer: if the source deck repeats an identical line near the bottom of
+  most slides (a running disclaimer, a confidentiality marker, a deck
+  title/part/session tag), the extraction step already found and removed
+  it from every slide's extracted text for you, and the renderer stamps
+  it back onto every output slide automatically — you do not need to,
+  and cannot, do anything with it. If some other bottom-of-slide line
+  still shows up in `text_blocks` (visible by a `row_y` near the bottom
+  of the slide) it did NOT meet that automatic detection's bar, most
+  often because it wasn't repeated on enough slides to be confident it's
+  boilerplate rather than real content — treat it as real content and
+  place it in whatever field fits, not as a section eyebrow.
 
 ## THE CORE PRINCIPLE: preserve content, translate presentation
 
@@ -43,7 +54,15 @@ changes is the visual vehicle. Your job, slide by slide:
 6. If a source slide is a pure section divider / chapter break with little
    text, use `module_divider`. If it's a short standalone
    quotation/maxim, use `quote`.
-7. Never invent facts, numbers, or claims not present in the source.
+7. Never invent facts, numbers, or claims not present in the source. This
+   includes table rows: never add a row that summarizes, combines, or
+   introduces data beyond what the source table itself contains.
+8. Carry over the source slide's speaker notes (verbatim, in the `notes`
+   field) and any "Source:"/"Sources:" attribution line (verbatim, in the
+   `sourceLine` field) — see the dedicated section on these below. Both
+   are source content exactly as much as the visible slide text is, and
+   are checked for on every slide, not just the ones where the main text
+   is dense enough to make them easy to remember.
 
 ## Layout catalog — when to use each, and exact JSON fields
 
@@ -84,10 +103,20 @@ has bullet-like structure, even loose structure, since it reads better.
 
 ### `checklist`
 Title + checkbox-style bullet list. Fields: `title`, `eyebrow?`, `tag?`,
-`tagColor?`, `subtitle?`, `items` (array of strings; if an item naturally
-reads as "Label: rest of sentence" the renderer auto-bolds the label —
-phrase items that way when the source supports it, e.g. "Data privacy:
-never paste unpublished results").
+`tagColor?`, `subtitle?`, `items` (array of strings; if an item ALREADY
+reads as "Label: rest of sentence" IN THE SOURCE — the source itself
+uses a colon, a dash, or an equivalent clean break with no words added
+or removed on either side — the renderer auto-bolds the label; do not
+manufacture this pattern by editing a plain sentence into it. "Data
+privacy: never paste unpublished results" is fine to use as-is if the
+source already phrases it that way. It is NOT fine to take a source
+sentence like "Finance income is treated as interest on deposits" and
+rewrite it into "Finance income: treated as interest on deposits" —
+that drops the word "is" and changes a complete sentence into a
+fragment, which is exactly the kind of small, silent rewording this
+prompt exists to prevent. When the source is a plain sentence with no
+natural label to begin with, use it verbatim as a plain item instead of
+inventing a label for it).
 Use for: THE DEFAULT for any bulleted or list-like source slide with
 roughly 3-7 items and no other special structure. This is your most
 common choice.
@@ -134,11 +163,60 @@ Use for: source content that explicitly contrasts a bad example against
 a good one (a very common pattern in "how to prompt/write/ask" content).
 
 ### `table`
-Branded data table with a dark navy header row. Fields: `title`,
-`eyebrow?`, `headers` (array of strings), `rows` (array of arrays of
-strings, same length as headers).
+Branded data table with a dark navy header row — a real, native
+PowerPoint table (fully editable with PowerPoint's own table tools),
+not a drawn approximation, and it auto-fits its own row heights to
+content. Fields: `title`, `eyebrow?`, `headers` (array of strings),
+`rows` (array of arrays of strings, same length as headers), `sourceLine?`
+(verbatim "Source: ..." / "Sources: ..." attribution line, if the source
+slide had one — see the Notes and source lines section below).
 Use for: any source table, or clearly tabular/matrix content (a
 comparison across 3+ items on 2+ dimensions).
+The row count in `rows` must exactly equal the number of data rows in
+the source table(s) this slide's `source_indices` point to — never fewer
+(a dropped row), never more (an invented one). If content must split
+across two `table` slides, the two row counts must sum to the source's
+row count exactly.
+
+### `compare_tables`
+Two full native tables side by side, each under its own colored heading
+bar — the "as reported / recast", "before / after" pattern where the
+point is the side-by-side contrast itself. Fields: `title`, `eyebrow?`,
+`left` and `right`, each `{heading, headers, rows}` (same shape as
+`table`'s `headers`/`rows`), `sourceLine?`.
+Use for: the source shows two related tables meant to be read side by
+side (typically the same line items, "before" on the left and "after"
+on the right). Prefer this over merging both into one wide `table` —
+merging loses the side-by-side contrast that's the slide's actual point,
+and a wider single table hits its row-count/font-size ceiling sooner
+than two narrower ones would. As with `table`, each side's row count
+must exactly match its corresponding source table.
+
+### `waterfall`
+A true proportional bridge/waterfall chart — bars scaled to their real
+value (not a row of equal-sized number cards), with dashed connector
+lines carrying the eye from one bar's running total into the next, plus
+an optional numbered "what changes" side panel. Fields: `title`,
+`eyebrow?`, `subtitle?`, `bars` (array of `{label, value, kind, display?}`
+in left-to-right order — `kind` is `"total"` for a bar that anchors at
+zero, such as the starting reported figure, an intermediate recast
+subtotal, or the final figure, or `"up"`/`"down"` for a bar that stacks
+as a delta on the previous bar's running total; `value` is a plain
+number for scaling the bar's height; `display` is the exact string to
+print above the bar — pass the source's own formatted figure, e.g.
+`"(6,074)"` or `"+24,388"`, copied character-for-character, rather than
+letting the renderer reformat `value`), `whatChanges?` (array of up to 3
+strings, each becomes one numbered panel item).
+Use for: any source slide whose point is a bridge from one figure to
+another through a sequence of additions/subtractions — a classic
+financial waterfall chart, a before-to-after reconciliation, a
+step-by-step build-up to a total. This is the correct choice instead of
+forcing the sequence into `kpi_stats` (a row of equal-sized tiles has no
+way to show that one delta is small and another is large, and it has no
+slot for the intermediate delta steps at all — confirmed on a real
+conversion where a 7-step bridge collapsed into 4 same-sized cards with
+three of the steps' values folded as parenthetical asides into a
+neighboring caption instead of shown as their own bars).
 
 ### `flow_diagram`
 Horizontal boxes-and-arrows process flow (best for 3-5 steps that fit as
@@ -152,7 +230,17 @@ Use for: a clear linear process/pipeline in the source (step 1 -> step 2
 Row of 2-5 big-number stat tiles on navy tiles. Fields: `title`,
 `subtitle?`, `stats` (array of `{value, label}`, value is short like
 "38%" or "24" or "<6 wks").
-Use for: source content that is fundamentally a set of headline metrics.
+Use for: source content that is fundamentally a set of INDEPENDENT
+headline metrics — figures that stand alone and aren't steps in a
+sequence. Do NOT use this for a bridge/waterfall/reconciliation (a
+figure that moves from a starting value to an ending value through a
+series of additions and subtractions) even though each step is
+individually a "number" — every tile in this layout renders the same
+size regardless of value, so it cannot show that one step is a small
+adjustment and another is a large one, and it has no way to represent
+an intermediate delta step at all. That content belongs in `waterfall`
+instead; using `kpi_stats` for it has silently lost the size/shape of
+the bridge on a real conversion.
 
 ### `donut_stat`
 A real, editable donut/pie chart (2-4 segments) with a value+label legend
@@ -278,12 +366,60 @@ The rule is about what the TEXT covers, not whether text merely exists:
   fixed slot count allows (e.g. 8 items for a 4-card grid) should split
   into multiple target slides of the same layout, sized appropriately
   (e.g. two 4-card grids), not compressed into oversized cards.
-- A `table` with more than ~8 data rows, or very long cell text, should
-  split into two `table` slides (repeat the header) rather than shrink
-  the font past readability.
+- A `table`/`compare_tables` table renders as a real native table that
+  auto-fits its own row heights to content, which comfortably holds far
+  more rows than a drawn approximation could — a single-column-of-numbers
+  table with short cell text can hold in the neighborhood of 18-20 data
+  rows on one slide; a wide table with long cell text (a 4-column
+  "label / recast label / category / why" table, for instance) fits
+  fewer, more like 9-10. Judge by how much text is actually in the
+  cells, not by row count alone, and do not default to splitting a
+  table just because it has more than a handful of rows — that
+  undersells what this component can actually hold, and gratuitous
+  splitting is itself a fidelity problem: it fragments a table that
+  told one coherent story (e.g. a full P&L from revenue to profit for
+  the year) into disconnected pieces, and if the source presented two
+  such tables side by side for comparison, splitting into 4+ slides
+  loses that comparison entirely. Only split when the content
+  genuinely would not be legible otherwise.
+- When a source slide shows two related tables meant to be compared
+  side by side (an "as reported" table beside a "recast" table, a
+  "before" beside an "after", each covering the same line items), use
+  `compare_tables` rather than merging them into one wide `table` — the
+  merge loses the side-by-side contrast that is the slide's actual
+  point, and prompted exactly the excess splitting described above on a
+  real conversion (a merged 4-column table needing 4-5 target slides to
+  hold what two `compare_tables` slides — or even one — would have held
+  clearly).
 - When you split, give each part a clear title (e.g. reuse the same title
   for both, or suffix "(cont'd)" on the second) and put the SAME
   `source_indices` on all parts.
+
+## Notes and source lines — two universal optional fields
+
+Every layout accepts two additional optional fields, on top of whatever
+that layout itself requires:
+
+- `notes`: if the extracted source slide's `notes` field is non-null,
+  copy it into this field VERBATIM — word for word, complete, never
+  summarized or trimmed. Speaker notes carry facilitator guidance,
+  calculation sources, and talking points that exist nowhere else on the
+  slide; the fact that they're not visible on the rendered slide is not
+  a reason to treat them as less important to preserve than anything
+  else in the source. Omit the field entirely if the source slide had no
+  notes — do not invent notes, and do not put your own commentary here.
+- `sourceLine`: if a source slide contains a short attribution line
+  beginning "Source:" or "Sources:" (a citation to the underlying data —
+  a company's financial statements, a named report, a dataset), copy it
+  verbatim into this field on the slide you build from that source
+  content. These lines are easy to mistake for footer boilerplate
+  because they're small and sit near the bottom of the slide, but they
+  are NOT the repeated deck-wide footer described above — each one is
+  specific to its slide's content and must travel with it. Do not drop
+  one because it "looks like" boilerplate; check whether its wording is
+  identical across many slides (genuine boilerplate, already handled
+  automatically) or unique to this slide's own data (a real citation you
+  must carry over yourself).
 
 ## What NOT to do
 
@@ -319,7 +455,7 @@ Respond with ONLY a JSON object of this shape, no other text:
 {
   "slides": [
     { "source_indices": [1], "layout": "cover", "title": "...", ... },
-    { "source_indices": [2], "layout": "checklist", "title": "...", "items": [...] }
+    { "source_indices": [2], "layout": "checklist", "title": "...", "items": [...], "notes": "..." }
   ]
 }
 ```

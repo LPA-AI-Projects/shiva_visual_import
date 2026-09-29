@@ -101,19 +101,25 @@ async function runPipeline(job, file, workDir) {
   await execFileP('python3', [path.join(__dirname, 'lib', 'patch_bullets.py'), rawPath, bulletQueuePath, patchedPath], { timeout: 60000 });
   markStep(job, 'overflow');
 
-  // ---- 5. QA (structural + visual) ----
+  // ---- 5. QA (structural + content fidelity + visual) ----
   let qa;
   try {
-    qa = await runQA(patchedPath, workDir);
+    qa = await runQA(patchedPath, workDir, { plan, extracted });
   } catch (e) {
     console.warn('QA pass failed, shipping without visual QA:', e.message);
-    qa = { structuralIssues: [], flagged: [] };
+    qa = { structuralIssues: [], flagged: [], contentFidelityWarnings: [] };
   }
   if (qa.structuralIssues.length) {
     // Should never happen (the component library uses safeLine everywhere),
     // but if a future layout regresses, refuse to ship a file that will
     // fail to open in PowerPoint.
     throw new Error('Structural QA found invalid shape geometry: ' + JSON.stringify(qa.structuralIssues));
+  }
+  if (qa.contentFidelityWarnings && qa.contentFidelityWarnings.length) {
+    // Soft warning, not a hard failure — see checkTableRowFidelity's own
+    // comment for why. Logged loudly so it isn't missed even though the
+    // job still completes; surfaced to the client via job.qaReport too.
+    console.warn('Content fidelity warnings:', JSON.stringify(qa.contentFidelityWarnings, null, 1));
   }
   job.qaReport = qa;
   markStep(job, 'qa');
