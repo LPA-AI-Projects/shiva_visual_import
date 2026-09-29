@@ -103,7 +103,8 @@ The brand constants (colors, fonts, canvas size) are exported from
   requirement) — `image_full` is the deliberate exception, used only
   when a source slide is essentially a diagram/photo with no clean
   structured equivalent.
-- The planner batches 12 source slides per Claude call; very large decks
+- The planner batches 6 source slides per Claude call (auto-splits smaller on
+  truncated JSON); very large decks
   (200+ slides) take several minutes end-to-end, most of it the batched
   planning calls plus the visual QA pass.
 - Visual QA re-renders a flagged slide once; it doesn't loop indefinitely
